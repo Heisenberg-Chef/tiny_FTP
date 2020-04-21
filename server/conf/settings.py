@@ -7,7 +7,7 @@ USER_HOME = "%s/home" % BASE_DIR
 LOG_DIR = "%s/log" % BASE_DIR
 LOG_LEVEL = "DEBUG"
  
-ACCOUNT_FILE = "%s/conf/account.cfg" % BASE_DIR
+ACCOUNT_FILE = "%s/conf/accounts.cfg" % BASE_DIR
 
 HOST = '127.0.0.1'
 PORT = 9999

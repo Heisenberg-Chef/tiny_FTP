@@ -80,15 +80,13 @@ class FTPHandler(socketserver.BaseRequestHandler):
     def authenticate(self,username,password):
         print("get in authentication",username,password)
         config = configparser.ConfigParser()
-        print(config)
-        config = config.read(settings.ACCOUNT_FILE)
-        print(config)
-        # if username in config.sections():    #   匹配成功了
-        #     print("ok sections")
-        #     _password = config[username]["password"]
-        #     if _password == password:
-        #         print("pass authentication.",username)
-        #         return config[username]
+        config.read(settings.ACCOUNT_FILE)
+        if username in config.sections():    #   匹配成功了
+            print("ok sections")
+            _password = config[username]["password"]
+            if _password == password:
+                print("pass authentication.",username)
+                return config[username]
 
     #   接受客户端传输来的文件，并且保存到服务器。        
     def _put(self,*args,**kwargs):
