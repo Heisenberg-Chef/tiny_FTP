@@ -74,6 +74,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
         else:
             print("Passing authentication:",user)
             self.user = user
+            self.USER_HOME_PATH = settings.USER_HOME + os.sep + str(data.get('username'))
             self.send_response(254) #   254:通过身份验证          
             
     #   校验用户的合法性
@@ -91,11 +92,14 @@ class FTPHandler(socketserver.BaseRequestHandler):
     #   接受客户端传输来的文件，并且保存到服务器。        
     def _put(self,*args,**kwargs):
         data = args[0]
-        base_filename = data.get('filename')
-        file_obj = open(base_filename,'wb')
-        data = self.request.recv(4096)
-        file_obj.write(data)
-        file_obj.close()
+        base_target = data.get('filename')
+        abs_path = self.USER_HOME_PATH + os.sep + base_target
+        print(abs_path)
+        if os.path.isfile(abs_path):
+            file_obj = open(abs_path,'wb')
+            data = self.request.recv(4096)
+            file_obj.write(data)
+            file_obj.close()
     #   
     def _get(self,*args,**kwargs):
         data = args[0]
@@ -131,7 +135,8 @@ class FTPHandler(socketserver.BaseRequestHandler):
                     print("Sending file done...")
         else:   
             self.send_response(256)     #   256:服务器上面不存在该文件
-            
+    def get_file_tree(self,path):
+        pass
     def ls(self,*args,**kwargs):
         eval(os.system(args[0]))
     
