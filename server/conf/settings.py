@@ -2,7 +2,7 @@
 
 import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-print(BASE_DIR)
+#   print(BASE_DIR)
 USER_HOME = "%s/home" % BASE_DIR
 LOG_DIR = "%s/log" % BASE_DIR
 LOG_LEVEL = "DEBUG"

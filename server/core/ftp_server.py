@@ -74,7 +74,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
                 print("pass authentication.",username)
                 return config[username]
     #   接受客户端传输来的文件，并且保存到服务器。        
-    def _put(self,*args,*kwargs):
+    def _put(self,*args,**kwargs):
         data = args[0]
         base_filename = data.get('filename')
         file_obj = open(base_filename,'wb')
@@ -82,7 +82,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
         file_obj.write(data)
         file_obj.close()
     #   
-    def _get(self,*args,*kwargs):
+    def _get(self,*args,**kwargs):
         data = args[0]
         if data.get("filename") is None:
             self.send_response(255) #   255:文件名不存在

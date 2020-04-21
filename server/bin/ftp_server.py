@@ -10,4 +10,5 @@ sys.path.append(BASE_DIR)   #   向我们的索引库目录中加入BASE_DIR
 from core import main 
 
 if __name__ == '__main__':
-    main.ArvgHandler()
+    server = main.ArvgHandler()
+    server.start()
