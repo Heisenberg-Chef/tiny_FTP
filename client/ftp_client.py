@@ -63,7 +63,7 @@ class FTPClient():
             'password':passwd
         }
         #发送信息
-        self.sock.sendall(json.dumps(data).encode())    #   发送到服务器，等待远程服务器响应
+        self.sock.send(json.dumps(data).center(1024,' ').encode())    #   发送到服务器，等待远程服务器响应
         #   -----waiting-----
         response = self.get_response()  #   获取服务器的返回代码
         if response.get('status_code') == 254:  #   通过验证
@@ -186,7 +186,7 @@ class FTPClient():
         }
         self.sock.send(json.dumps(data_header).encode())    #   发送客户端的操作信息
         self.sock.recv(1)
-        file_obj = open(cmd_list[1],'br')
+        file_obj = open(cmd_list[1],'rb')
         for line in file_obj:
             self.sock.send(line)
             

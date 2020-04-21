@@ -12,6 +12,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)   #   向我们的索引库目录中加入BASE_DIR
 
 from conf import settings
+from core import main 
 
 STATUS_CODE = {
     250:"Invalid cmd format,e.g:{'action':'get','filename':'test.py','size':344}",
@@ -41,9 +42,12 @@ class FTPHandler(socketserver.BaseRequestHandler):
             data = json.loads(self.data.decode())   #   接受客户端的信息并且转化为json对象
             
             if data.get('action') is not None:
-                print("---->",hasattr(self,"_auth"))
+                
                 if hasattr(self,"_%s" % data.get('action')):    #   客户端action 符合服务端action
+                    print("--get in auth-->",hasattr(self,"_{}".format(data.get('action'))))
                     func = getattr(self,"_%s" % data.get('action'))
+                    print(func)
+                    print(data)
                     func(data)
                 else:   #   客户端action不正确
                     print("Invalid cmd format.")
@@ -61,6 +65,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
     #   核对客户端信息，用户名：密码。
     def _auth(self,*args,**kwargs):
         data = args[0]
+        print("in _auth:",data)
         if data.get("username") is None or data.get("password") is None:    #   客户端传来的数据中用户名或者密码有空的
             self.send_response(252) #   验证数据无效    
         user = self.authenticate(data.get("username"),data.get("password")) #   把客户端的用户密码进行校验
@@ -73,13 +78,17 @@ class FTPHandler(socketserver.BaseRequestHandler):
             
     #   校验用户的合法性
     def authenticate(self,username,password):
+        print("get in authentication",username,password)
         config = configparser.ConfigParser()
-        config.read(settings.ACCOUNT_FILE)
-        if username in config.sections():    #   匹配成功了
-            _password = config[username]["password"]
-            if _password == password:
-                print("pass authentication.",username)
-                return config[username]
+        print(config)
+        config = config.read(settings.ACCOUNT_FILE)
+        print(config)
+        # if username in config.sections():    #   匹配成功了
+        #     print("ok sections")
+        #     _password = config[username]["password"]
+        #     if _password == password:
+        #         print("pass authentication.",username)
+        #         return config[username]
 
     #   接受客户端传输来的文件，并且保存到服务器。        
     def _put(self,*args,**kwargs):
@@ -129,5 +138,5 @@ class FTPHandler(socketserver.BaseRequestHandler):
         eval(os.system(args[0]))
     
 if __name__ == '__main__':
-    HOST,PORT = "127.0.0.1",9999
-            
+    server = main.ArvgHandler()
+    server.start()
