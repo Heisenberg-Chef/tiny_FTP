@@ -5,6 +5,12 @@ import json
 import configparser
 import os
 import hashlib
+import sys
+
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR)   #   向我们的索引库目录中加入BASE_DIR
+
 from conf import settings
 
 STATUS_CODE = {
@@ -24,14 +30,16 @@ class FTPHandler(socketserver.BaseRequestHandler):
     def handle(self):
         while True:
             self.data = self.request.recv(1024).strip()
-            print(self.client_address[0])
+            #   print(self.client_address[0])
             print(self.data)
             # self.request.sendall(self.data.upper())
-            
+
             if not self.data:
                 print("client closed...")
                 break
+
             data = json.loads(self.data.decode())   #   接受客户端的信息并且转化为json对象
+            
             if data.get('action') is not None:
                 print("---->",hasattr(self,"_auth"))
                 if hasattr(self,"_%s" % data.get('action')):    #   客户端action 符合服务端action
@@ -61,18 +69,18 @@ class FTPHandler(socketserver.BaseRequestHandler):
         else:
             print("Passing authentication:",user)
             self.user = user
-            self.send_response(254) #   254:通过身份验证
-            
+            self.send_response(254) #   254:通过身份验证          
             
     #   校验用户的合法性
     def authenticate(self,username,password):
         config = configparser.ConfigParser()
         config.read(settings.ACCOUNT_FILE)
-        if username in config.section():    #   匹配成功了
+        if username in config.sections():    #   匹配成功了
             _password = config[username]["password"]
             if _password == password:
                 print("pass authentication.",username)
                 return config[username]
+
     #   接受客户端传输来的文件，并且保存到服务器。        
     def _put(self,*args,**kwargs):
         data = args[0]
@@ -114,7 +122,6 @@ class FTPHandler(socketserver.BaseRequestHandler):
                 else:
                     file_obj.close()
                     print("Sending file done...")
-                    
         else:   
             self.send_response(256)     #   256:服务器上面不存在该文件
             
