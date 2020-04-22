@@ -36,7 +36,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
             self.data = self.request.recv(1024).strip()
             if not self.data:
                 print('*'*60)
-                print("[{}]:断开连接".format(self.client_address[0]))
+                print("[{}]--> Disconnected.".format(self.client_address[0]))
                 print('*'*60)
                 self.request.close()
                 break
@@ -86,25 +86,24 @@ class FTPHandler(socketserver.BaseRequestHandler):
             _password = config[username]["password"]
             if _password == password:   #   密码是否一致
                 del(_password)  #   清空无用数据内存
-                print(f"welcome {username}".center(60,'*'))  
+                print(f"welcome {username}".center(60,'*'))
                 return True
             else:
                 return False
         else:
             return False
-
-    #   接受客户端传输来的文件，并且保存到服务器。        
-    # def _put(self,*args,**kwargs):
-    #     data = args[0]
-    #     base_target = data.get('filename')
-    #     #   abs_path = self.USER_HOME_PATH + os.sep + base_target
-    #     print(abs_path)
-    #     if os.path.isfile(abs_path):
-    #         file_obj = open(abs_path,'wb')
-    #         data = self.request.recv(4096)
-    #         file_obj.write(data)
-    #         file_obj.close()
-    # #   
+#   服务器端的put可以理解为put到用户的根目录中
+    def _put(self,*args,**kwargs):
+        data = args[0]
+        base_target = data.get('filename')
+        #   abs_path = self.USER_HOME_PATH + os.sep + base_target
+        print(abs_path)
+        if os.path.isfile(abs_path):
+            file_obj = open(abs_path,'wb')
+            data = self.request.recv(4096)
+            file_obj.write(data)
+            file_obj.close()
+    #   
     # def _get(self,*args,**kwargs):
     #     data = args[0]
     #     if data.get("filename") is None:
