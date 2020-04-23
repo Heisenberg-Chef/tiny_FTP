@@ -31,7 +31,6 @@ class FTPHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
         self._bool_user_auth = 0
-        
         while True:
             self.data = self.request.recv(1024).strip()
             if not self.data:
@@ -59,7 +58,8 @@ class FTPHandler(socketserver.BaseRequestHandler):
     #   向客户端返回数据
     ###############################################################
     def send_response(self,status_code,other_response_header=None):
-        response = {'status_code':status_code}
+        global STATUS_CODE
+        response = {'status_code':status_code,'status_msg':STATUS_CODE[status_code]}
         if other_response_header:
             response.update(other_response_header)
         self.request.sendall(json.dumps(response).encode())
@@ -86,23 +86,20 @@ class FTPHandler(socketserver.BaseRequestHandler):
             _password = config[username]["password"]
             if _password == password:   #   密码是否一致
                 del(_password)  #   清空无用数据内存
+                self.USER_HOME_PATH = os.path.join(settings.USER_HOME,username)
                 print(f"welcome {username}".center(60,'*'))
                 return True
             else:
                 return False
         else:
             return False
-#   服务器端的put可以理解为put到用户的根目录中
+#   服务器端的put可以理解为put到用户的根目录中,逻辑层只对文件
     def _put(self,*args,**kwargs):
-        data = args[0]
-        base_target = data.get('filename')
-        #   abs_path = self.USER_HOME_PATH + os.sep + base_target
-        print(abs_path)
-        if os.path.isfile(abs_path):
-            file_obj = open(abs_path,'wb')
-            data = self.request.recv(4096)
-            file_obj.write(data)
-            file_obj.close()
+        cli_header = args[0]
+        f_name = cli_header.get('f_name')
+        f_size = cli_header.get('f_size')
+        f_path = cli_header.get('f_path')
+        
     #   
     # def _get(self,*args,**kwargs):
     #     data = args[0]

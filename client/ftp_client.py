@@ -6,7 +6,7 @@ import optparse
 import json
 import hashlib
 import getpass
-
+import time
 BASE_CACHE = os.path.abspath(os.path.dirname(__file__))
 
 STATUS_CODE = {
@@ -33,27 +33,42 @@ class FTPClient():
         'f_md5':False,      #   文件的md5验证值
         'f_name':None,      #   文件名
         'f_size':None,      #   文件的长度单位是byte
+        'abs_path':None,    #   文件在本机的绝对路径
+        'rel_path':None     #   文件相对于家目录路径
         }
         
-        USAGE = "FTP_Client+++produce by Ray<aka>Heisenberg".center(60,'*')
+        USAGE = "FTP_Client+++produce by Ray<aka>Heisenberg".center(60,'*') + '\nIf you are new user,please sign up before login\n \
+            use function {-c} or {--create} '
         self.parser = optparse.OptionParser(usage=USAGE)
         self.parser.add_option("-s","--server",dest='server',help="FTP server ip")
         self.parser.add_option("-p","--port",type="int",dest="port",help="FTP server port")
-        self.parser.add_option("-u","--username",dest="username",help="username")
-        
+        self.parser.add_option("-u","--username",dest="username",help="User\'s name.")
+        #   并不存储变量
+        self.parser.add_option("-c","--create",dest="c_flag",action="store_false",help="Sign up an Account for user.",default = None)
+        #   if self.option.c_flag != None:  #   使用c_flag注册
+            
+        self.option,self.args=self.parser.parse_args()  #   分析命令行中传入的参数        
+        self.host_check()   #   host:port检查
         self.login()    #   接收到数据，准备让用户输入密码
         self.verify_args()  #   本地确认输入信息是否有问题
         self.make_connect() #   尝试性的建立一个连接
+        
+    #   def sign_up(self)：     #   保留注册功能
+
+        
+    def host_check(self):
+        if self.option.server == None or self.option.port == None:
+            self._server = str(input("[Client]: Server\'s IP--> "))
+            self._port = int(input("[Client]: Server\'s PORT--> "))
+        else:
+            self._server = self.option.server
+            self._port = self.option.port
 
     def login(self):    #   封装登陆信息，在登陆之前
-        self.option,self.args=self.parser.parse_args()
         self._username = self.option.username
-        self._server = self.option.server
-        self._port = self.option.port
         if self._username == None:
-            self._username = input("Plz type in your ID:")
-        self._password = getpass.getpass(f"Plz input [{self._username}]\' password:")
-        print(self._password)
+            self._username = input("[Client]: ID--> ")
+        self._password = getpass.getpass(f"[Client]: [{self._username}]\'s password--> ")
         
     #   远程连接
     def make_connect(self):     #   建立一个连接
@@ -86,7 +101,7 @@ class FTPClient():
             print("Passed Authentication".center(60,"*"))
             return True
         else:
-            print(response.get("status_code"))
+            print(response.get("status_code"),)
    
     def get_response(self):      #   得到服务器的回复，公共方法。
         data = self.sock.recv(1024).strip()
@@ -168,33 +183,70 @@ class FTPClient():
                     print("--->file recv done<---")
                     file_obj.close()
     #   put 发送方法
-    def _put(self,cmd_list):
-        if len(cmd_list) == 1:
-            print("No filename follows...")
-            return
-        action = cmd_list.pop(0)
-        if '--md5' in cmd_list:
-            cmd_list.remove('--md5')
-            #  md5_val=  func()
-            #md5_opt = True
+    def _put(self,cmd_list,recursion=None,):
+        '''
+        _put为私有函数，功能：上传
+        recursion是递归操作选项，不要对他进行传参。
+        函数使用默认的分析，递归操作
+        '''
+
+        if recursion == None:
+            if len(cmd_list) == 1:  #   初步判定put是否正确
+                print("No filename follows...")
+                return
+            if '--md5' in cmd_list:
+                pass
+            else:
+                md5_opt = False
+            self.header['f_md5'] = md5_opt
+            for target in cmd_list:
+                thePath = os.path.join(BASE_CACHE,target)   #   包括文件/目录的绝对路径
+                relPath = os.path.dirname(os.path.relpath(thePath,BASE_CACHE))  #   相对于工作目录的计算出来的路径
+                if os.path.isfile(thePath):
+                    recursion = None
+                    self._fill_header(action="put",filename = target,md5_opt = md5_opt,\
+                        abs_path = thePath,relative_path = relPath) #   疯狂传参就对了
+                    print(self.header)
+                    # self.sock.sendall(json.dumps(self.header).center(1024,' ').encode())    #   发送客户端的操作信息
+                    # self.sock.recv(1)
+                elif os.path.isdir(thePath):
+                    cmd_list = os.listdir(thePath)
+                    if '--md5' in cmd_list:
+                        cmd_list = cmd_list.append('--md5')
+                    print(cmd_list)
+                    self._put(cmd_list,recursion=thePath)
+                else:
+                    print("[{}]: <{}> does not exist.".format(self._username.strip(),target))
         else:
-            md5_opt = False
-        self.header['f_md5'] = md5_opt
-        for filename in cmd_list:
-            thePath = os.path.join(BASE_CACHE,filename)
-            if os.path.isfile(thePath):
-                self._fill_header(action,filename,thePath,md5_opt)
-                self.sock.sendall(json.dumps(self.header).center(1024,' ').encode())    #   发送客户端的操作信息
-                self.sock.recv(1)
+            for target in cmd_list:
+                thePath = os.path.join(recursion,target)                        #   包括文件/目录的绝对路径
+                relPath = os.path.dirname(os.path.relpath(thePath,BASE_CACHE))  #   相对于工作目录的计算出来的路径
+                if os.path.isfile(thePath):
+                    if '--md5' in cmd_list:
+                        md5_opt = True
+                    else:
+                        md5_opt = False
+                    self._fill_header(action="put",filename = target,md5_opt = md5_opt,\
+                        abs_path = thePath,relative_path = relPath)             #   疯狂传参就对了
+                    print(self.header)
+                    # func
+                else:
+                    thePath = os.path.join(recursion,target)
+                    cmd_list = os.listdir(thePath)
+                    self._put(cmd_list,thePath)
+                    
+                    
 
     #   填充json头文件
-    def _fill_header(self,action,filename,thePath,md5_opt):
+    def _fill_header(self,action,filename,md5_opt,abs_path,relative_path):
         self.header['action'] = action
         self.header['username'] = self.option.username
         self.header['password'] = self._password
         self.header['f_name'] = filename
         self.header['f_md5'] = md5_opt
-        self.header['f_size'] = os.stat(thePath).st_size
+        self.header['f_size'] = os.stat(abs_path).st_size
+        self.header['f_path'] = relative_path
+        
     #   关闭连接
     def _logout(self,cmd_list):
         print(f"Account {self._username} is logging out.".center(60,"*"))
@@ -204,7 +256,6 @@ class FTPClient():
     def interaction(self):
         if self.authentication():   #   认证成功
             print("Starting interactive with remote server".center(60,"*"))
-
             while True:
                 cmd = input("[%s]:" % (self._username.strip()))
                 if len(cmd) == 0:
