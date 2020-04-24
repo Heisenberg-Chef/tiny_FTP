@@ -19,10 +19,11 @@ STATUS_CODE = {
     201:"Username or Password was wrong.",
     200:"OKAY CONFIRMED",
     502:"CMDLine has no <filename> use [help] checking solutions.",
-    501:"Target are not in Remote server,use [ls] or [tree] having a look",
-    500:"f:Data packing complete.",
+    501:"Target are not in Remote server,use [tree] having a look",
+    500:"File checking progressing complete.",
     510:"MD5 Passed",
-    511:"MD5 unPassed"
+    511:"MD5 unPassed",
+    404:"Fatal Error : I don\'t know..."
 }
 
 
@@ -31,6 +32,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
         self._bool_user_auth = 0
+        self._package_length = 512
         while True:
             self.data = self.request.recv(1024).strip()
             if not self.data:
@@ -95,50 +97,82 @@ class FTPHandler(socketserver.BaseRequestHandler):
             return False
 #   服务器端的put可以理解为put到用户的根目录中,逻辑层只对文件
     def _put(self,*args,**kwargs):
+        #   接受守护程序发过来的数据包
         cli_header = args[0]
         f_name = cli_header.get('f_name')
         f_size = cli_header.get('f_size')
-        f_path = cli_header.get('f_path')
-        
-    #   
-    # def _get(self,*args,**kwargs):
-    #     data = args[0]
-    #     if data.get("filename") is None:
-    #         self.send_response(255) #   255:文件名不存在
-    #     #   user_home_dir = "%s/%s" %(settings.USER_HOME,self.user['filename']) #   当前连接用户的目录
-    #    #     file_abs_path = "%s/%s" %(user_home_dir,data.get('filename'))   #   文件的绝对路径
-        
-    #     print("file \'s abs path :",file_abs_path)
-        
-    #     if os.path.isfile(file_abs_path):
-    #         file_obj = open(file_abs_path,'rb') #   使用Byte打开文件
-    #         file_size = os.path.getsize(file_abs_path)  #   读取文件长度 
-    #         #   self.send_response(257,data={'file_size':file_size})    #   返回即将传输的文件的大小
+        f_path = cli_header.get('rel_path')
+        #   f_md5 = cli_header.get('f_md5')
+        ######################################
+        #   分析数据结构
+        try:
+            if f_path == '':    #   直接传过来的文件，存储在用户目录下面
+                f = open(os.path.join(self.USER_HOME_PATH,f_name),'wb')
+                total = f_size
+                self.request.sendall(str(self._package_length).center(64,' ').encode())   #   数据包长度告诉客户端
+                while total > 0:
+                    if total < self._package_length:
+                        f.write(self.request.recv(total))
+                    else:
+                        #   暂定512bytes方便实验
+                        f.write(self.request.recv(self._package_length))
+                    total -= self._package_length
+                f.close()
+                print("[{}]--> [{}] transmition completed.".format(self.client_address[0],f_name))
+            else:
+                #   self.request.sendall(str(self._package_length).center(64,' ').encode())   #   数据包长度告诉客户端
+                temp = self.USER_HOME_PATH
+                for i in f_path:
+                    temp = os.path.join(temp,i)
+                    if os.path.exists(temp):
+                        continue;
+                    else:
+                        os.mkdir(temp)
+                f = open(os.pat.join(temp,f_name),'wb')
+                total = f_size
+                self.request.sendall(str(self._package_length).center(64,' ').encode())   #   数据包长度告诉客户端
+                while total > 0:
+                    if total < self._package_length:
+                        f.write(self.request.recv(total))
+                    else:
+                        #   暂定512bytes方便实验
+                        f.write(self.request.recv(self._package_length))
+                    total -= self._package_length
+                f.close()
+                print("[{}]--> [{}] transmition completed.".format(self.client_address[0],f_name))
+        except:
+            self.send_response(404)
+
+    def _get(self,*args,**kwargs):
+        cli_header = args[0]
+        f_name = cli_header.get('f_name')
+        f_md5 = cli_header.get("f_md5")
+        # if f_md5:
+        #     pass
+        # else:
+        #     pass
+        dir_list = []
+        while f_name != '':
+            dir_list.append(os.path.basename(f_name))
+            if f_name != '/':
+                f_name = os.path.dirname(f_name)
+        dir_list.reverse()
+        f_name = self.USER_HOME_PATH 
+        for i in dir_list:
+            f_name = os.path.join(f_name,i)
+        if os.path.exists(f_name):
+            print(f_name)
+            self.send_response(500)
             
-    #         self.request.recv(1)    #   等待客户端确认
-            
-    #         if data.get('md5'): #   有 --md5 则传输时候加上加密
-    #             md5_obj = hashlib.md5()
-    #             for line in file_obj:
-    #                 self.request.send(line)
-    #                 md5_obj.update(line)
-    #             else:
-    #                 file_obj.close()
-    #                 md5_val = md5_obj.hexdigest()
-    #                 self.send_response(258,{'md5':md5_val})
-    #                 print("Sending file done...")
-    #         else:   #   没有 md5 直接传输文件
-    #             for line in file_obj:
-    #                 self.request.send(line)
-    #             else:
-    #                 file_obj.close()
-    #                 print("Sending file done...")
-    #     else:   
-    #         self.send_response(256)     #   256:服务器上面不存在该文件
-    # def get_file_tree(self,path):
-    #     pass
-    # def ls(self,*args,**kwargs):
-    #     eval(os.system(args[0]))
+        else:
+            self.send_response(501)
+        
+        
+        
+    def get_file_tree(self,path):
+        pass
+    def ls(self,*args,**kwargs):
+        eval(os.system(args[0]))
     
 if __name__ == '__main__':
     print("going to start server".center(60,'#'))

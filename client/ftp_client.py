@@ -16,8 +16,8 @@ STATUS_CODE = {
     201:"Username or Password was wrong.",
     200:"OKAY CONFIRMED",
     502:"CMDLine has no <filename> use [help] checking solutions.",
-    501:"Target are not in Remote server,use [ls] or [tree] having a look",
-    500:"f:Data packing complete.",
+    501:"Target are not in Remote server,use [tree] having a look",
+    500:"File checking progressing complete.",
     510:"MD5 Passed",
     511:"MD5 unPassed"
 }
@@ -26,19 +26,20 @@ class FTPClient():
     
     def __init__(self):
         #   自定义数据头文件
-        self.header={       #   文件传输、
-        'action':None,      #   行为
-        'username':None,    #   用户名
-        'password':None,    #   密码
-        'f_md5':False,      #   文件的md5验证值
-        'f_name':None,      #   文件名
-        'f_size':None,      #   文件的长度单位是byte
-        'abs_path':None,    #   文件在本机的绝对路径
-        'rel_path':None     #   文件相对于家目录路径
-        }
-        
+        self.header={       
+            'action':None,      #   行为
+            'username':None,    #   用户名
+            'password':None,    #   密码
+            'f_md5':False,      #   文件的md5验证值
+            'f_name':None,      #   文件名
+            'f_size':None,      #   文件的长度单位是byte
+            'abs_path':None,    #   文件在本机的绝对路径
+            'rel_path':None     #   文件相对于家目录路径
+            }
+            
         USAGE = "FTP_Client+++produce by Ray<aka>Heisenberg".center(60,'*') + '\nIf you are new user,please sign up before login\n \
             use function {-c} or {--create} '
+        self.md5_opt = False
         self.parser = optparse.OptionParser(usage=USAGE)
         self.parser.add_option("-s","--server",dest='server',help="FTP server ip")
         self.parser.add_option("-p","--port",type="int",dest="port",help="FTP server port")
@@ -55,7 +56,6 @@ class FTPClient():
         
     #   def sign_up(self)：     #   保留注册功能
 
-        
     def host_check(self):
         if self.option.server == None or self.option.port == None:
             self._server = str(input("[Client]: Server\'s IP--> "))
@@ -101,8 +101,8 @@ class FTPClient():
             print("Passed Authentication".center(60,"*"))
             return True
         else:
-            print(response.get("status_code"),)
-   
+            print(response.get("status_code"),STATUS_CODE[response.get("status_code")])
+
     def get_response(self):      #   得到服务器的回复，公共方法。
         data = self.sock.recv(1024).strip()
         data = json.loads(data.decode())
@@ -116,72 +116,34 @@ class FTPClient():
 
     #   get 下载方法
     def _get(self,cmd_list):
-        print('get--',cmd_list)
-        if len(cmd_list)==1:
-            print("No filename follows...")
+        '''
+        从服务器下载功能函数
+        私有函数只能内部调用
+        命令行使用get <remote file>进行调用
+        '''
+        if len(cmd_list) == 1:
+            print("[{}]: <get> need at least a filename at Remote server.".format(self._username.strip()))
             return
-        #   客户端操作信息
-        data_header={
-            'action':'get',
-            'filename':cmd_list[1]
-        }
-        
-        if self._md5_required(cmd_list):#   命令请求中带有--md5
-            data_header['md5'] = True # 向客户端写入MD5请求
+        #   指令行中删除命令操作符
+        try:
+            cmd_list.remove('get')
+        except:
+            pass
+        if '--md5' in cmd_list:
+            self.md5_opt = True
+            cmd_list.remove('--md5')
+        for target in cmd_list: #   此处target是远程服务器上面相对于家目录的地址，传参时候我就使用了f_name参数进行传输
+            self._fill_header(action='get',filename=target,md5_opt=self.md5_opt)
+            self.sock.send(json.dumps(self.header).center(1024,' ').encode())
+            response = self.get_response()
+            if response.get('status_code') == 500:
+                print(666666)    #   执行函数
+            elif response.get('status_code') == 501:
+                print(response.get('status_code'),STATUS_CODE[response.get("status_code")])
             
-        self.sock.send(json.dumps(data_header).encode())    #   向客户端发送客户端的操作信息
-        response = self.get_response()  #   接受服务器端信息
-        print(response)
-        
-        if response["status_code"] == 257:  #   传输中
-            self.sock.send('1'.encode())    #   向服务器发送确认信息
-            base_filename = cmd_list[1].split('/')[-1] #    提取文件名
-            received_size = 0   #   本地的接受量
-            file_obj = open(base_filename,'wb')     #   二进制模式写入
             
-            if self._md5_required(cmd_list):   
-                md5_obj = hashlib.md5()
-                progress = self.show_progress(response['file_size'])
-                progress.__next__()
-                
-                while received_size < response['file_size']:       #    当接受量，小于文件大小，持续循环
-                    
-                    data = self.sock.recv[4096] #   4Mb
-                    received_size += len(data)
-                    
-                    try:
-                        progress.send(len(data))
-                    except:
-                        print("100%")
-                        file_obj.close()
-                    
-                    file_obj.write(data)    #   把接收的数据写入文件
-                    md5_obj.update(data)    #   把数据进行md5加密
-                else:   #   对应的上面的while
-                    print("--->file recv done<---") #   接收成功
-                    file_obj.close()
-                    md5_val =md5_obj.digest()
-                    md5_from_server = self.get_response()   #   获得服务器md5数据
-                    if md5_from_server['status_code'] == 258:
-                        print(f"{base_filename}MD5校验一致。")
-                        print("服务器效验数据：",md5_from_server)
-                        print("本地效验数据：",md5_val)
-            else:
-                progress = self.show_progress(response['file_size'])
-                progress.__next__()
-                
-                while received_size < response['file-size']:
-                    
-                    data = self.sock.recv(4096)
-                    received_size += len(data)
-                    file_obj.write(data)
-                    try:
-                        progress.send(len(data))
-                    except:
-                        print('100%')
-                else:
-                    print("--->file recv done<---")
-                    file_obj.close()
+        
+        
     #   put 发送方法
     def _put(self,cmd_list,recursion=None,):
         '''
@@ -192,28 +154,44 @@ class FTPClient():
 
         if recursion == None:
             if len(cmd_list) == 1:  #   初步判定put是否正确
-                print("No filename follows...")
-                return
+                print("[{}]: No filename follows...".format(self._username.strip()))
             if '--md5' in cmd_list:
-                pass
+                self.md5_opt = True
+                cmd_list.remove('--md5')
             else:
-                md5_opt = False
-            self.header['f_md5'] = md5_opt
+                self.md5_opt = False
+            self.header['f_md5'] = self.md5_opt
             for target in cmd_list:
                 thePath = os.path.join(BASE_CACHE,target)   #   包括文件/目录的绝对路径
                 relPath = os.path.dirname(os.path.relpath(thePath,BASE_CACHE))  #   相对于工作目录的计算出来的路径
                 if os.path.isfile(thePath):
                     recursion = None
-                    self._fill_header(action="put",filename = target,md5_opt = md5_opt,\
+                    self._fill_header(action="put",filename = target,md5_opt = self.md5_opt,\
                         abs_path = thePath,relative_path = relPath) #   疯狂传参就对了
                     print(self.header)
-                    # self.sock.sendall(json.dumps(self.header).center(1024,' ').encode())    #   发送客户端的操作信息
-                    # self.sock.recv(1)
+                    ######################################
+                    #   在这里写网络通信
+                    #<!--></-->
+                    self.sock.sendall(json.dumps(self.header).center(1024,' ').encode()) # 发送文件头信息
+                    # #   等待服务器响应封包数据的尺寸，默认512一个包
+                    package_size = int(self.sock.recv(64).decode().strip())
+
+                    f = open(thePath,'rb')
+                    file_size = self.header.get('f_size')
+                    remanent = file_size
+                    #   开始传输
+                    while remanent > 0:
+                        if remanent < package_size:
+                            self.sock.send(f.read(remanent))
+                        else:
+                            self.sock.send(f.read(package_size))
+                        remanent -= package_size
+                        #   进度条
+                    #   传输完毕关闭句柄
+                    f.close()
+                    print("-"*60)
                 elif os.path.isdir(thePath):
                     cmd_list = os.listdir(thePath)
-                    if '--md5' in cmd_list:
-                        cmd_list = cmd_list.append('--md5')
-                    print(cmd_list)
                     self._put(cmd_list,recursion=thePath)
                 else:
                     print("[{}]: <{}> does not exist.".format(self._username.strip(),target))
@@ -222,14 +200,36 @@ class FTPClient():
                 thePath = os.path.join(recursion,target)                        #   包括文件/目录的绝对路径
                 relPath = os.path.dirname(os.path.relpath(thePath,BASE_CACHE))  #   相对于工作目录的计算出来的路径
                 if os.path.isfile(thePath):
-                    if '--md5' in cmd_list:
-                        md5_opt = True
-                    else:
-                        md5_opt = False
-                    self._fill_header(action="put",filename = target,md5_opt = md5_opt,\
-                        abs_path = thePath,relative_path = relPath)             #   疯狂传参就对了
-                    print(self.header)
-                    # func
+                    
+                    dir_list = []
+                    while relPath != '':
+                        dir_list.append(os.path.basename(relPath))
+                        #   print(dir_list)
+                        relPath = os.path.dirname(relPath)
+                    dir_list.reverse()
+                    self._fill_header(action="put",filename = target,md5_opt = self.md5_opt,\
+                        abs_path = thePath,relative_path = dir_list)             #   疯狂传参就对了
+                    ######################################
+                    #   在这里写网络通信
+                    #<!--></-->
+                    self.sock.sendall(json.dumps(self.header).center(1024,' ').encode()) # 发送文件头信息
+                    # #   等待服务器响应封包数据的尺寸，默认512一个包
+                    package_size = int(self.sock.recv(64).decode().strip())
+
+                    f = open(thePath,'rb')
+                    file_size = self.header.get('f_size')
+                    remanent = file_size
+                    #   开始传输
+                    while remanent > 0:
+                        if remanent < package_size:
+                            self.sock.send(f.read(remanent))
+                        else:
+                            self.sock.send(f.read(package_size))
+                        remanent -= package_size
+                        #   进度条
+                    #   传输完毕，关闭句柄
+                    f.close()   
+                    print("-"*60)
                 else:
                     thePath = os.path.join(recursion,target)
                     cmd_list = os.listdir(thePath)
@@ -238,14 +238,18 @@ class FTPClient():
                     
 
     #   填充json头文件
-    def _fill_header(self,action,filename,md5_opt,abs_path,relative_path):
+    def _fill_header(self,action,filename,md5_opt,abs_path=None,relative_path=None):
         self.header['action'] = action
         self.header['username'] = self.option.username
         self.header['password'] = self._password
         self.header['f_name'] = filename
         self.header['f_md5'] = md5_opt
-        self.header['f_size'] = os.stat(abs_path).st_size
-        self.header['f_path'] = relative_path
+        if action == 'put':
+            self.header['f_size'] = os.stat(abs_path).st_size
+        else:
+            self.header['f_size'] = None
+        self.header['rel_path'] = relative_path
+        self.header['abs_path'] = abs_path
         
     #   关闭连接
     def _logout(self,cmd_list):
