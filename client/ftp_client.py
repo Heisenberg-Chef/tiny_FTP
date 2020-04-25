@@ -15,11 +15,12 @@ STATUS_CODE = {
     202:"Invalid authentication information",
     201:"Username or Password was wrong.",
     200:"OKAY CONFIRMED",
-    502:"CMDLine has no <filename> use [help] checking solutions.",
+    502:"Geting process is finished.",
     501:"Target are not in Remote server,use [tree] having a look",
     500:"File checking progressing complete.",
     510:"MD5 Passed",
-    511:"MD5 unPassed"
+    511:"MD5 unPassed",
+    404:"Fatal Error : I don\'t know..."
 }
 
 class FTPClient():
@@ -36,7 +37,7 @@ class FTPClient():
             'abs_path':None,    #   文件在本机的绝对路径
             'rel_path':None     #   文件相对于家目录路径
             }
-            
+        self.pack_size = 512
         USAGE = "FTP_Client+++produce by Ray<aka>Heisenberg".center(60,'*') + '\nIf you are new user,please sign up before login\n \
             use function {-c} or {--create} '
         self.md5_opt = False
@@ -115,7 +116,7 @@ class FTPClient():
     #   进度条  生成器表示
 
     #   get 下载方法
-    def _get(self,cmd_list):
+    def _fetch(self,cmd_list):
         '''
         从服务器下载功能函数
         私有函数只能内部调用
@@ -126,7 +127,7 @@ class FTPClient():
             return
         #   指令行中删除命令操作符
         try:
-            cmd_list.remove('get')
+            cmd_list.remove('fetch')
         except:
             pass
         if '--md5' in cmd_list:
@@ -136,24 +137,65 @@ class FTPClient():
             self._fill_header(action='get',filename=target,md5_opt=self.md5_opt)
             self.sock.send(json.dumps(self.header).center(1024,' ').encode())
             response = self.get_response()
-            if response.get('status_code') == 500:
-                print(666666)    #   执行函数
-            elif response.get('status_code') == 501:
+            while response.get('status_code') == 500:
+                #   print(666666)    #   执行函数
+                data = json.loads(self.sock.recv(1024).decode().strip())
+                print('####################')
+                print('####################')
+                print(data)
+                print(response)
+                print('####################')
+                print('####################')
+                f_name = data.get('f_name')
+                remanent = data.get('f_size')
+                rel = data.get('rel_path')
+                f_abs = BASE_CACHE
+                for i in rel:
+                    f_abs = os.path.join(f_abs,i)
+                    if os.path.exists(f_abs) or i == f_name:
+                        pass
+                    else:
+                        os.mkdir(f_abs)
+                f_abs = os.path.join(f_abs,f_name)  #   本地绝对路径封装完毕
+                
+                f = open(f_abs,'wb')
+                self.sock.send(str(self.pack_size).center(64,' ').encode())
+                while remanent > 0:
+                    if remanent > self.pack_size:
+                        temp = self.sock.recv(self.pack_size)
+                        f.write(temp)
+                        remanent -= self.pack_size
+                    else:
+                        temp = self.sock.recv(remanent)
+                        f.write(temp)
+                        remanent -= remanent
+                print('-'*60)
+                response = self.get_response()
+
+                print(response)
+            if response.get('status_code') == 501:
                 print(response.get('status_code'),STATUS_CODE[response.get("status_code")])
+            elif response.get('status_code') == 502:
+                print(response.get('status_code'),STATUS_CODE[response.get("status_code")])
+            else:
+                return
             
             
         
         
     #   put 发送方法
-    def _put(self,cmd_list,recursion=None,):
+    def _push(self,cmd_list,recursion=None,):
         '''
         _put为私有函数，功能：上传
         recursion是递归操作选项，不要对他进行传参。
         函数使用默认的分析，递归操作
         '''
-
+        try:
+            cmd_list.remove('push')
+        except:
+            pass
         if recursion == None:
-            if len(cmd_list) == 1:  #   初步判定put是否正确
+            if len(cmd_list) == 0:  #   初步判定put是否正确
                 print("[{}]: No filename follows...".format(self._username.strip()))
             if '--md5' in cmd_list:
                 self.md5_opt = True
@@ -166,7 +208,7 @@ class FTPClient():
                 relPath = os.path.dirname(os.path.relpath(thePath,BASE_CACHE))  #   相对于工作目录的计算出来的路径
                 if os.path.isfile(thePath):
                     recursion = None
-                    self._fill_header(action="put",filename = target,md5_opt = self.md5_opt,\
+                    self._fill_header(action="push",filename = target,md5_opt = self.md5_opt,\
                         abs_path = thePath,relative_path = relPath) #   疯狂传参就对了
                     print(self.header)
                     ######################################
@@ -192,7 +234,7 @@ class FTPClient():
                     print("-"*60)
                 elif os.path.isdir(thePath):
                     cmd_list = os.listdir(thePath)
-                    self._put(cmd_list,recursion=thePath)
+                    self._push(cmd_list,recursion=thePath)
                 else:
                     print("[{}]: <{}> does not exist.".format(self._username.strip(),target))
         else:
@@ -207,7 +249,7 @@ class FTPClient():
                         #   print(dir_list)
                         relPath = os.path.dirname(relPath)
                     dir_list.reverse()
-                    self._fill_header(action="put",filename = target,md5_opt = self.md5_opt,\
+                    self._fill_header(action="push",filename = target,md5_opt = self.md5_opt,\
                         abs_path = thePath,relative_path = dir_list)             #   疯狂传参就对了
                     ######################################
                     #   在这里写网络通信
@@ -233,7 +275,7 @@ class FTPClient():
                 else:
                     thePath = os.path.join(recursion,target)
                     cmd_list = os.listdir(thePath)
-                    self._put(cmd_list,thePath)
+                    self._push(cmd_list,thePath)
                     
                     
 
@@ -244,7 +286,7 @@ class FTPClient():
         self.header['password'] = self._password
         self.header['f_name'] = filename
         self.header['f_md5'] = md5_opt
-        if action == 'put':
+        if action == 'push':
             self.header['f_size'] = os.stat(abs_path).st_size
         else:
             self.header['f_size'] = None

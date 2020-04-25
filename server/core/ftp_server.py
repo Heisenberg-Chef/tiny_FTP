@@ -6,7 +6,7 @@ import configparser
 import os
 import hashlib
 import sys
-
+import time
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)   #   向我们的索引库目录中加入BASE_DIR
 
@@ -18,12 +18,13 @@ STATUS_CODE = {
     202:"Invalid authentication information",
     201:"Username or Password was wrong.",
     200:"OKAY CONFIRMED",
-    502:"CMDLine has no <filename> use [help] checking solutions.",
+    502:"Geting process is finished.",
     501:"Target are not in Remote server,use [tree] having a look",
     500:"File checking progressing complete.",
     510:"MD5 Passed",
     511:"MD5 unPassed",
-    404:"Fatal Error : I don\'t know..."
+    404:"Fatal Error : I don\'t know...",
+    400:"Single File transmition completed,but target is entire folder."
 }
 
 
@@ -33,6 +34,16 @@ class FTPHandler(socketserver.BaseRequestHandler):
     def handle(self):
         self._bool_user_auth = 0
         self._package_length = 512
+        self.header={       
+            'action':None,      #   行为
+            'username':None,    #   用户名
+            'password':None,    #   密码
+            'f_md5':False,      #   文件的md5验证值
+            'f_name':None,      #   文件名
+            'f_size':None,      #   文件的长度单位是byte
+            'abs_path':None,    #   文件在本机的绝对路径
+            'rel_path':None     #   文件相对于家目录路径
+            }        
         while True:
             self.data = self.request.recv(1024).strip()
             if not self.data:
@@ -47,6 +58,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
                     if data.get('action') == "auth" or self._bool_user_auth == 1:   # 除了_auth指令之外，如果没有通过认证一律关闭连接
                         print("[{}]--> ${}".format(self.client_address[0],data.get('action')))
                         func = getattr(self,"_%s" % data.get('action'))
+                        print("In listen # ",data)
                         func(data)
                     else:
                         print("[{}]--> Danger action,kick off [{}].".format(self.client_address[0],self.data.get['username']))
@@ -64,7 +76,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
         response = {'status_code':status_code,'status_msg':STATUS_CODE[status_code]}
         if other_response_header:
             response.update(other_response_header)
-        self.request.sendall(json.dumps(response).encode())
+        self.request.send(json.dumps(response).center(1024,' ').encode())
     ###############################################################
     #   核对客户端信息，用户名：密码。
     def _auth(self,*args,**kwargs):
@@ -79,7 +91,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
             else:
                 self.send_response(201)
                 print("[{}]--> Username or Password incorrect".format(self.client_address[0]))
-            
+
     #   校验用户的合法性
     def authenticate(self,username,password):
         config = configparser.ConfigParser()
@@ -96,7 +108,7 @@ class FTPHandler(socketserver.BaseRequestHandler):
         else:
             return False
 #   服务器端的put可以理解为put到用户的根目录中,逻辑层只对文件
-    def _put(self,*args,**kwargs):
+    def _push(self,*args,**kwargs):
         #   接受守护程序发过来的数据包
         cli_header = args[0]
         f_name = cli_header.get('f_name')
@@ -105,48 +117,56 @@ class FTPHandler(socketserver.BaseRequestHandler):
         #   f_md5 = cli_header.get('f_md5')
         ######################################
         #   分析数据结构
-        try:
-            if f_path == '':    #   直接传过来的文件，存储在用户目录下面
-                f = open(os.path.join(self.USER_HOME_PATH,f_name),'wb')
-                total = f_size
-                self.request.sendall(str(self._package_length).center(64,' ').encode())   #   数据包长度告诉客户端
-                while total > 0:
-                    if total < self._package_length:
-                        f.write(self.request.recv(total))
-                    else:
-                        #   暂定512bytes方便实验
-                        f.write(self.request.recv(self._package_length))
-                    total -= self._package_length
-                f.close()
-                print("[{}]--> [{}] transmition completed.".format(self.client_address[0],f_name))
-            else:
-                #   self.request.sendall(str(self._package_length).center(64,' ').encode())   #   数据包长度告诉客户端
-                temp = self.USER_HOME_PATH
-                for i in f_path:
-                    temp = os.path.join(temp,i)
-                    if os.path.exists(temp):
-                        continue;
-                    else:
-                        os.mkdir(temp)
-                f = open(os.pat.join(temp,f_name),'wb')
-                total = f_size
-                self.request.sendall(str(self._package_length).center(64,' ').encode())   #   数据包长度告诉客户端
-                while total > 0:
-                    if total < self._package_length:
-                        f.write(self.request.recv(total))
-                    else:
-                        #   暂定512bytes方便实验
-                        f.write(self.request.recv(self._package_length))
-                    total -= self._package_length
-                f.close()
-                print("[{}]--> [{}] transmition completed.".format(self.client_address[0],f_name))
-        except:
-            self.send_response(404)
+        if f_path == '':    #   直接传过来的文件，存储在用户目录下面
+            f = open(os.path.join(self.USER_HOME_PATH,f_name),'wb')
+            total = f_size
+            self.request.send(str(self._package_length).center(64,' ').encode())   #   数据包长度告诉客户端
+            print('package len:',self._package_length)
+            while total > 0:
+                if total < self._package_length:
+                    f.write(self.request.recv(total))
+                else:
+                    #   暂定512bytes方便实验
+                    f.write(self.request.recv(self._package_length))
+                total -= self._package_length
+            f.close()
+            print("[{}]--> [{}] transmition completed.".format(self.client_address[0],f_name))
+        else:
+            #   self.request.sendall(str(self._package_length).center(64,' ').encode())   #   数据包长度告诉客户端
+            temp = self.USER_HOME_PATH
+            for i in f_path:
+                temp = os.path.join(temp,i)
+                if os.path.exists(temp):
+                    print('exists')
+                    continue;
+                else:
+                    os.mkdir(temp)
+            f = open(os.path.join(temp,f_name),'wb')
+            total = f_size
+            print('f size:',total)
+            time.sleep(0.2)
+            self.request.send(str(self._package_length).center(64,' ').encode())   #   数据包长度告诉客户端
+            while total >= 0:
+                if total < self._package_length:
+                    f.write(self.request.recv(total))
+                else:
+                    #   暂定512bytes方便实验
+                    f.write(self.request.recv(self._package_length))
+                total -= self._package_length
+            f.close()
+            print("[{}]--> [{}] transmition completed.".format(self.client_address[0],f_name))
 
-    def _get(self,*args,**kwargs):
+    def _fetch(self,*args,**kwargs):
         cli_header = args[0]
+        self._get(cli_header)
+        self.send_response(502)
+    #   底层封装函数 对于文件的完成信号需要使用fetch外包装
+    def _get(self,cli_header):  #   单个文件的信号  
+        #print("[{}]--> in get \n [{}] \n\ndebug".format(self.client_address[0],args[0]))
         f_name = cli_header.get('f_name')
+        #print(f_name)
         f_md5 = cli_header.get("f_md5")
+        f_flag = cli_header.get('action')
         # if f_md5:
         #     pass
         # else:
@@ -157,17 +177,74 @@ class FTPHandler(socketserver.BaseRequestHandler):
             if f_name != '/':
                 f_name = os.path.dirname(f_name)
         dir_list.reverse()
-        f_name = self.USER_HOME_PATH 
+        print(dir_list)
+        f_name = self.USER_HOME_PATH
         for i in dir_list:
             f_name = os.path.join(f_name,i)
         if os.path.exists(f_name):
-            print(f_name)
-            self.send_response(500)
-            
+            if os.path.isfile(f_name):
+                self.send_response(500)
+                print('----------> sending response...')
+                filename = os.path.basename(f_name)
+                self._fill_header(action='file',filename=filename,\
+                    abs_path=f_name,relative_path=dir_list)
+                self.request.send(json.dumps(self.header).center(1024,' ').encode())
+                f = open(f_name,'rb')
+                self._per_size = int(self.request.recv(64).decode().strip())
+                remanent = self.header['f_size']
+                while remanent > 0:
+                    if remanent > self._per_size:
+                        temp = f.read(self._per_size)
+                        self.request.send(temp)
+                        remanent -= self._per_size
+                    else:
+                        temp = f.read(remanent)
+                        self.request.sendall(temp)
+                        remanent -= remanent
+                print("[{}]--> [{}] sending completed.".format(self.client_address[0],f_name))
+                if f_flag == 'fetch':
+                    self.send_response(502)
+            elif os.path.isdir(f_name):
+                tmp_list = os.listdir(f_name)
+                try:
+                    tmp_list.remove('.DS_Store')
+                except:
+                    pass
+                if tmp_list == []:
+                    print('+++++++++++++++++++++++++++++++++++++++++++++++++++')
+                print("[{}]--> [{}] is folder.".format(self.client_address[0],f_name))
+                for i in tmp_list:
+                    element_in_folder = os.path.join(f_name,i)
+                    print("[{}]--> [{}] join into".format(self.client_address[0],element_in_folder))
+                    element_in_folder = os.path.relpath(element_in_folder,self.USER_HOME_PATH)
+                    print(self.USER_HOME_PATH)
+                    print("##################################################")
+                    print(element_in_folder)
+                    self._fill_header(action='folder',filename=element_in_folder)
+                    self._get(self.header)
+                #   self.send_response(502)
+            else:
+                self.send_response(404)
         else:
             self.send_response(501)
-        
-        
+            
+###################################################################
+#           此处服务器向客户端传参
+# 函数直接copy的客户端的fill header   使用action来告诉客户端目标类型
+###################################################################
+#   从client里面抄的功能差不多有很多没用的功能，就算是冗余了    
+    def _fill_header(self,action=None,filename=None,md5_opt=False,abs_path=None,relative_path=[]):
+        self.header['action'] = action
+        self.header['f_name'] = filename
+        self.header['f_md5'] = md5_opt
+        if action == 'file':
+            self.header['f_size'] = os.stat(abs_path).st_size
+        else:
+            self.header['f_size'] = None
+        self.header['rel_path'] = relative_path
+        self.header['abs_path'] = abs_path
+        print(self.header)
+                
         
     def get_file_tree(self,path):
         pass
