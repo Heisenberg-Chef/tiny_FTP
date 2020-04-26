@@ -7,6 +7,7 @@ import os
 import hashlib
 import sys
 import time
+import tree
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)   #   向我们的索引库目录中加入BASE_DIR
 
@@ -241,7 +242,37 @@ class FTPHandler(socketserver.BaseRequestHandler):
     def get_response(self):      #   得到客户端的回复，公共方法。
         data = self.request.recv(1024).strip()
         data = json.loads(data.decode())
-        return data          
+        return data
+    
+    def _ls(self,*args,**kwargs):
+        data = str(tree.dfs_show(self.USER_HOME_PATH,0))
+        f = open(self.USER_HOME_PATH + 'ls_temp_file_dont_use_id.txt',"w")
+        f.write(data)
+        f.close()
+        f_abs = self.USER_HOME_PATH + 'ls_temp_file_dont_use_id.txt'
+        ##########
+        self._fill_header(action='file',\
+            filename='ls_temp_file_dont_use_id.txt',\
+                    abs_path=f_abs,relative_path='')
+        self.request.send(json.dumps(self.header).center(1024,' ').encode())
+        ft = open(f_abs,'rb')
+        self._per_size = int(self.request.recv(64).decode().strip())
+        remanent = self.header['f_size']
+        while remanent > 0:
+            print("pushing :{}".format(self._per_size))
+            if remanent > self._per_size:
+                print("In if:{}".format(remanent))
+                temp = ft.read(self._per_size)
+                self.request.sendall(temp)
+                remanent -= self._per_size
+            else:
+                print("In else:{}".format(remanent))
+                temp = ft.read(remanent)
+                self.request.sendall(temp)
+                remanent -= self._per_size
+        ft.close()
+        time.sleep(1)
+        self.send_response(502)
 ###################################################################
 #           此处服务器向客户端传参
 # 函数直接copy的客户端的fill header   使用action来告诉客户端目标类型
@@ -262,8 +293,6 @@ class FTPHandler(socketserver.BaseRequestHandler):
         
     def get_file_tree(self,path):
         pass
-    def ls(self,*args,**kwargs):
-        eval(os.system(args[0]))
     
 if __name__ == '__main__':
     print("going to start server".center(60,'#'))

@@ -155,7 +155,6 @@ class FTPClient():
                 self.sock.send(str(self.pack_size).center(64,' ').encode())
                 print('sending length')
                 while remanent >= 0:
-                    print('download')
                     if remanent > self.pack_size:
                         temp = self.sock.recv(self.pack_size)
                         f.write(temp)
@@ -298,6 +297,32 @@ class FTPClient():
         print(f"Account {self._username} is logging out.".center(60,"*"))
         self.sock.close()
         sys.exit("Thx for using!!\nIf U like my tiny_FTP,plz give a star. :)")
+    def _ls(self,*args,**kwargs):
+        self._fill_header(action='ls',filename=0,md5_opt=False)
+        self.sock.send(json.dumps(self.header).center(1024,' ').encode())
+        data = json.loads(self.sock.recv(1024).decode().strip())
+        f_name = data.get('f_name')
+        remanent = data.get('f_size')
+        f_abs = os.path.join(BASE_CACHE,f_name)  #   本地绝对路径封装完毕
+        f = open(f_abs,'wb')
+        self.sock.send(str(self.pack_size).center(64,' ').encode())
+        print('sending length')
+        while remanent >= 0:
+            if remanent > self.pack_size:
+                temp = self.sock.recv(self.pack_size)
+                f.write(temp)
+                remanent -= self.pack_size
+            else:
+                temp = self.sock.recv(remanent)
+                f.write(temp)
+                remanent -= self.pack_size
+        f.close()
+        ft = open(f_abs,'r')
+        temp = ft.read()
+        print(temp)
+        response = self.get_response()
+        print(response)
+        
 ################################################## 交互程序  ############################################
     def interaction(self):
         if self.authentication():   #   认证成功

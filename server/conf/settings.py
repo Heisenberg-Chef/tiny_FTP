@@ -9,5 +9,5 @@ LOG_LEVEL = "DEBUG"
  
 ACCOUNT_FILE = "%s/conf/accounts.cfg" % BASE_DIR
 
-HOST = '127.0.0.1'
+HOST = '108.171.195.131'
 PORT = 9999
