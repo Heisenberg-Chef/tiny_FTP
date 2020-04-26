@@ -160,17 +160,13 @@ class FTPHandler(socketserver.BaseRequestHandler):
         cli_header = args[0]
         self._get(cli_header)
         self.send_response(502)
+            
     #   底层封装函数 对于文件的完成信号需要使用fetch外包装
     def _get(self,cli_header):  #   单个文件的信号  
-        #print("[{}]--> in get \n [{}] \n\ndebug".format(self.client_address[0],args[0]))
+        print(cli_header)
         f_name = cli_header.get('f_name')
-        #print(f_name)
         f_md5 = cli_header.get("f_md5")
         f_flag = cli_header.get('action')
-        # if f_md5:
-        #     pass
-        # else:
-        #     pass
         dir_list = []
         while f_name != '':
             dir_list.append(os.path.basename(f_name))
@@ -181,53 +177,71 @@ class FTPHandler(socketserver.BaseRequestHandler):
         f_name = self.USER_HOME_PATH
         for i in dir_list:
             f_name = os.path.join(f_name,i)
+
         if os.path.exists(f_name):
             if os.path.isfile(f_name):
                 self.send_response(500)
-                print('----------> sending response...')
+                print('###  sending 500')
                 filename = os.path.basename(f_name)
+                try:
+                    dir_list.remove(filename)
+                except:
+                    pass
                 self._fill_header(action='file',filename=filename,\
                     abs_path=f_name,relative_path=dir_list)
                 self.request.send(json.dumps(self.header).center(1024,' ').encode())
                 f = open(f_name,'rb')
                 self._per_size = int(self.request.recv(64).decode().strip())
+                #print("receiving a packlen:{}".format(self._per_size))
                 remanent = self.header['f_size']
+                #print("###  length: {}".format(self._per_size))
+               # print("###  file size:{}".format(remanent))
                 while remanent > 0:
+                    print("pushing :{}".format(self._per_size))
                     if remanent > self._per_size:
+                        print("In if:{}".format(remanent))
                         temp = f.read(self._per_size)
-                        self.request.send(temp)
-                        remanent -= self._per_size
-                    else:
-                        temp = f.read(remanent)
+                        #print(temp)
                         self.request.sendall(temp)
-                        remanent -= remanent
+                        print("###  data sent")
+                        remanent -= self._per_size
+                        print("###  {}".format(remanent))
+                    else:
+                        print("In else:{}".format(remanent))
+                        temp = f.read(remanent)
+                        #print(temp)
+                        self.request.sendall(temp)
+                        print("###  data sent")
+                        remanent -= self._per_size
+                        print("###  {}".format(remanent))
+                f.close()
+                code = self.get_response()
+                print(code)
                 print("[{}]--> [{}] sending completed.".format(self.client_address[0],f_name))
-                if f_flag == 'fetch':
-                    self.send_response(502)
+                print('-'*60)
             elif os.path.isdir(f_name):
                 tmp_list = os.listdir(f_name)
                 try:
                     tmp_list.remove('.DS_Store')
                 except:
                     pass
-                if tmp_list == []:
-                    print('+++++++++++++++++++++++++++++++++++++++++++++++++++')
                 print("[{}]--> [{}] is folder.".format(self.client_address[0],f_name))
                 for i in tmp_list:
                     element_in_folder = os.path.join(f_name,i)
                     print("[{}]--> [{}] join into".format(self.client_address[0],element_in_folder))
                     element_in_folder = os.path.relpath(element_in_folder,self.USER_HOME_PATH)
-                    print(self.USER_HOME_PATH)
-                    print("##################################################")
-                    print(element_in_folder)
                     self._fill_header(action='folder',filename=element_in_folder)
+                    print("### callback _fetch")
                     self._get(self.header)
-                #   self.send_response(502)
             else:
                 self.send_response(404)
         else:
             self.send_response(501)
             
+    def get_response(self):      #   得到客户端的回复，公共方法。
+        data = self.request.recv(1024).strip()
+        data = json.loads(data.decode())
+        return data          
 ###################################################################
 #           此处服务器向客户端传参
 # 函数直接copy的客户端的fill header   使用action来告诉客户端目标类型

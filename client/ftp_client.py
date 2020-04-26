@@ -134,18 +134,11 @@ class FTPClient():
             self.md5_opt = True
             cmd_list.remove('--md5')
         for target in cmd_list: #   此处target是远程服务器上面相对于家目录的地址，传参时候我就使用了f_name参数进行传输
-            self._fill_header(action='get',filename=target,md5_opt=self.md5_opt)
+            self._fill_header(action='fetch',filename=target,md5_opt=self.md5_opt)
             self.sock.send(json.dumps(self.header).center(1024,' ').encode())
             response = self.get_response()
             while response.get('status_code') == 500:
-                #   print(666666)    #   执行函数
                 data = json.loads(self.sock.recv(1024).decode().strip())
-                print('####################')
-                print('####################')
-                print(data)
-                print(response)
-                print('####################')
-                print('####################')
                 f_name = data.get('f_name')
                 remanent = data.get('f_size')
                 rel = data.get('rel_path')
@@ -157,10 +150,12 @@ class FTPClient():
                     else:
                         os.mkdir(f_abs)
                 f_abs = os.path.join(f_abs,f_name)  #   本地绝对路径封装完毕
-                
+                print(f_abs)
                 f = open(f_abs,'wb')
                 self.sock.send(str(self.pack_size).center(64,' ').encode())
-                while remanent > 0:
+                print('sending length')
+                while remanent >= 0:
+                    print('download')
                     if remanent > self.pack_size:
                         temp = self.sock.recv(self.pack_size)
                         f.write(temp)
@@ -168,10 +163,11 @@ class FTPClient():
                     else:
                         temp = self.sock.recv(remanent)
                         f.write(temp)
-                        remanent -= remanent
-                print('-'*60)
+                        remanent -= self.pack_size
+                f.close()
+                
+                self.send_response(200)
                 response = self.get_response()
-
                 print(response)
             if response.get('status_code') == 501:
                 print(response.get('status_code'),STATUS_CODE[response.get("status_code")])
@@ -179,10 +175,14 @@ class FTPClient():
                 print(response.get('status_code'),STATUS_CODE[response.get("status_code")])
             else:
                 return
+    def send_response(self,status_code,other_response_header=None):
+        global STATUS_CODE
+        response = {'status_code':status_code,'status_msg':STATUS_CODE[status_code]}
+        if other_response_header:
+            response.update(other_response_header)
+        self.sock.send(json.dumps(response).center(1024,' ').encode())
             
             
-        
-        
     #   put 发送方法
     def _push(self,cmd_list,recursion=None,):
         '''
